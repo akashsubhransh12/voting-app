@@ -1,0 +1,6 @@
+{
+  "name": "Matdaan - ECI Voting App",
+  "description": "A secure, transparent, and real-time online voting system for the Election Commission of India including voter verification, admin dashboards, and live tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

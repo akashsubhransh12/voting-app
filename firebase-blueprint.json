@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user (voter or admin)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["voter", "admin"] },
+        "voterId": { "type": "string", "description": "Government issued Voter ID" },
+        "isVerified": { "type": "boolean" },
+        "pollingStationId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Election": {
+      "title": "Election",
+      "description": "An active or archived election",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["upcoming", "ongoing", "completed"] },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "startTime", "endTime", "status"]
+    },
+    "Candidate": {
+      "title": "Candidate",
+      "description": "A candidate contesting an election",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "electionId": { "type": "string" },
+        "name": { "type": "string" },
+        "party": { "type": "string" },
+        "symbol": { "type": "string" },
+        "voteCount": { "type": "integer" }
+      },
+      "required": ["electionId", "name", "party"]
+    },
+    "Vote": {
+      "title": "Vote",
+      "description": "A cast vote record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "electionId": { "type": "string" },
+        "candidateId": { "type": "string" },
+        "pollingStationId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "electionId", "candidateId"]
+    },
+    "PollingStation": {
+      "title": "Polling Station",
+      "description": "Data about a physical polling station",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "code": { "type": "string" }
+      },
+      "required": ["name", "code"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Public (limited) or private user profiles"
+    },
+    "elections": {
+      "schema": "Election",
+      "description": "Main election records"
+    },
+    "elections/{electionId}/candidates": {
+      "schema": "Candidate",
+      "description": "Candidates for a specific election"
+    },
+    "elections/{electionId}/votes": {
+      "schema": "Vote",
+      "description": "Votes cast in an election (indexed by userId for uniqueness)"
+    },
+    "pollingStations": {
+      "schema": "PollingStation",
+      "description": "Registered polling stations"
+    }
+  }
+}

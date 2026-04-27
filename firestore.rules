@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role detection - using get() lookup for security
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        getUserRole() == 'admin' ||
+        request.auth.token.email == 'subhranshakash@gmail.com'
+      );
+    }
+
+    function isVerifiedVoter() {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isVerified == true;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.email == request.auth.token.email &&
+             data.role in ['voter', 'admin'] &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.voterId is string && data.voterId.size() <= 50;
+    }
+
+    function isValidElection(data) {
+      return data.title is string && data.title.size() <= 200 &&
+             data.status in ['upcoming', 'ongoing', 'completed'] &&
+             data.startTime is timestamp &&
+             data.endTime is timestamp &&
+             data.endTime > data.startTime;
+    }
+
+    function isValidVote(data, electionId, userId) {
+      // Vote ID must be UID to ensure one vote
+      return data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.electionId == electionId &&
+             data.candidateId is string &&
+             data.timestamp == request.time &&
+             // Relational sync: Election must be ongoing
+             get(/databases/$(database)/documents/elections/$(electionId)).data.status == 'ongoing';
+    }
+
+    function isValidCandidate(data) {
+      return data.name is string && data.name.size() <= 100 &&
+             data.party is string && data.party.size() <= 100 &&
+             data.symbol is string && data.symbol.size() <= 100;
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) &&
+                    incoming().role == 'voter' && incoming().isVerified == false;
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'voterId', 'pollingStationId']) &&
+         incoming().role == existing().role &&
+         incoming().isVerified == false) ||
+        isAdmin()
+      );
+    }
+
+    match /elections/{electionId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidId(electionId) && isValidElection(incoming());
+      allow update: if isAdmin() && isValidElection(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasAny(['status', 'title', 'description', 'startTime', 'endTime'])
+      );
+      allow delete: if isAdmin();
+
+      match /candidates/{candidateId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() && isValidId(candidateId) && isValidCandidate(incoming());
+      }
+
+      match /votes/{userId} {
+        allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow list: if isAdmin();
+        allow create: if isVerifiedVoter() &&
+                      isValidId(userId) &&
+                      isValidVote(incoming(), electionId, userId) &&
+                      request.auth.uid == userId;
+      }
+    }
+
+    match /pollingStations/{stationId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(stationId);
+    }
+  }
+}
